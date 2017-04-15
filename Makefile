@@ -7,4 +7,4 @@ nodebug:
 	mpicc -g sack.c list.o -o sack
 	make run
 run:
-	mpirun -n 4 ./sack < t3.in
+	mpirun -n 4 ./sack < t1.in

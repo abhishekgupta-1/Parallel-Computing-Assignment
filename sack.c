@@ -138,7 +138,7 @@ int main(int argc, char *argv[]){
         DBG("Master : Input is complete\n");
         int *bestSol = (int*) malloc(sizeof(int)*(n+1));//bestSol[n] contains the bestSolVal;
         int *tempSol = (int*)malloc(sizeof(int)*(n+1));
-        for (i=0;i<n+1;i++) bestSol[i] = -1;
+        for (i=0;i<n;i++) tempSol[i] = bestSol[i] = -1;
         qsort(inp, n, sizeof(pair_t), compar);
         int pair[2];
         pair[0] = n; pair[1] = bag_size;
@@ -154,8 +154,16 @@ int main(int argc, char *argv[]){
             busy[i] = 0;
         busy[0] = 1;
         int dst = nextIdle(busy, nProc, &idle);
-        MPI_Send(bestSol, n+1, MPI_INT, dst, PBM_TAG, MPI_COMM_WORLD);
-        int bestSolVal = -1;
+        int total_weight = 0, bestSolVal = 0;
+        for (i=0;i<n && total_weight<=bag_size;i++){
+            total_weight += inp[i].weight;
+            bestSolVal += inp[i].value;
+            bestSol[i] = 1;
+        }
+        if (total_weight > bag_size){ bestSol[i-1] = 0; bestSolVal -= inp[i-1].value;}
+        bestSol[n] = bestSolVal;
+        tempSol[n] = bestSolVal;
+        MPI_Send(tempSol, n+1, MPI_INT, dst, PBM_TAG, MPI_COMM_WORLD);
         while (idle != nProc-1){
             MPI_Status status;
             MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
@@ -245,10 +253,10 @@ int main(int argc, char *argv[]){
                     int *auxSp = remove_from_list(&list);
                     int high = upper_bound(auxSp, n);
                     DBG("Upper bound calculated by %d = %d\n",myrank, high);
-                    if (high >= bestSolVal){
+                    if (high > bestSolVal){
                         int low = lower_bound(auxSp, n);
                         DBG("Lower bound calculated by %d = %d\n",myrank, low);
-                        if (low >= bestSolVal)  {
+                        if (low > bestSolVal)  {
                             auxSp[n] = low;
                             bestSolVal = low;
                             MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD); //problem
