@@ -80,8 +80,6 @@ int lower_bound(int *arr, int n){
         }
     }
     upto = i;
-    if (weight_used>bag_size) return -1;
-    int left = bag_size - weight_used;
     for (i=upto; i<n && weight_used<=bag_size; i++){
         total_val += inp[i].value;
         weight_used += inp[i].weight;
@@ -116,16 +114,14 @@ int main(int argc, char *argv[]){
     MPI_Get_processor_name(processor, &len);
     int nProc = size;
     DBG("Hello I am processor no. %d out of %d processors\n", myrank, size);
-   
     //MPI TYPE    
     int count = 2;
     int array_of_blocklengths[] = { 1, 1 };
-    MPI_Aint array_of_displacements[] = { offsetof( pair_t, value ),
-                                          offsetof( pair_t, weight ) };
+    MPI_Aint array_of_displacements[] = { offsetof( pair_t, value), 
+        offsetof(pair_t, weight)};
     MPI_Datatype array_of_types[] = { MPI_INT, MPI_INT };
     MPI_Datatype tmp_type, MPI_PAIR;
     MPI_Aint lb, extent;
-    
     MPI_Type_create_struct( count, array_of_blocklengths, array_of_displacements,
                             array_of_types, &tmp_type );
     MPI_Type_get_extent( tmp_type, &lb, &extent );
@@ -136,34 +132,43 @@ int main(int argc, char *argv[]){
     
     if (myrank == 0){ //master code
         scanf("%d %d", &n, &bag_size);
-        inp = (pair_t*)malloc(sizeof(n*sizeof(pair_t)));
+        inp = (pair_t*)malloc(n*sizeof(pair_t));
         for (i=0;i<n;i++)
             scanf("%d %d", &(inp[i].value), &(inp[i].weight));
-        int bestSol[n+1]; //bestSol[n] contains the bestSolVal;
-        bestSol[n] = -1;
-        for (i=0;i<n;i++)
-            bestSol[i] = -1;
+        DBG("Master : Input is complete\n");
+        int *bestSol = (int*) malloc(sizeof(int)*(n+1));//bestSol[n] contains the bestSolVal;
+        int *tempSol = (int*)malloc(sizeof(int)*(n+1));
+        for (i=0;i<n+1;i++) bestSol[i] = -1;
         qsort(inp, n, sizeof(pair_t), compar);
         int pair[2];
         pair[0] = n; pair[1] = bag_size;
-        MPI_Bcast(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
+        for (i=1;i<nProc;i++){
+            MPI_Send(pair, 2, MPI_INT, i, 1, MPI_COMM_WORLD);
+            MPI_Send(inp, n, MPI_PAIR, i, 2, MPI_COMM_WORLD);
+        }
+        DBG("Master : Input sent to all other processes\n");
         int idle = nProc - 1;
         tag_t tag;
-        int busy[nProc];
+        int *busy = (int*)malloc(nProc*sizeof(int));
         for (i=0;i<nProc;i++)
             busy[i] = 0;
         busy[0] = 1;
         int dst = nextIdle(busy, nProc, &idle);
         MPI_Send(bestSol, n+1, MPI_INT, dst, PBM_TAG, MPI_COMM_WORLD);
+        int bestSolVal = -1;
         while (idle != nProc-1){
             MPI_Status status;
             MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
             tag = status.MPI_TAG;
             int src = status.MPI_SOURCE;
             if (tag == SOLVE_TAG) { //receive best solution value and best solution
-                MPI_Recv(bestSol, n+1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
-                DBG("Received best soln from %d, bestSolVal = %d\n", src, bestSol[n]);
+                MPI_Recv(tempSol, n+1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
+                if (tempSol[n] >= bestSol[n]){
+                    for (i=0;i<n+1;i++)
+                        bestSol[i] = tempSol[i];
+                    bestSolVal = bestSol[n];
+                    DBG("Received best soln from %d, bestSolVal = %d\n", src, bestSol[n]);
+                }
             }
             if (tag == IDLE_TAG) { //processor is idle
                 MPI_Recv(&tag, 1, MPI_INT, src, tag, MPI_COMM_WORLD,  &status);
@@ -175,10 +180,10 @@ int main(int argc, char *argv[]){
                 int data[2];
                 MPI_Recv(data, 2, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
                 int high = data[0], nSlaves = data[1];
-                if (high > bestSol[n]) {
+                if (high > bestSolVal) {
                     int total= ((nSlaves <= idle)?nSlaves:idle);
-                    int data[total+1]; //data[total] contains bestSolval
-                    data[total] = bestSol[n];
+                    int *data = (int*)malloc((total+1)*sizeof(int)); //data[total] contains bestSolval
+                    data[total] = bestSolVal; 
                     DBG("Assigning %d processors to %d : ", total, src);
                     for (i=0;i<total;i++){
                         data[i] = nextIdle(busy, nProc, &idle);
@@ -198,73 +203,79 @@ int main(int argc, char *argv[]){
             tag = END_TAG;
             MPI_Send(&tag, 1, MPI_INT, i, END_TAG, MPI_COMM_WORLD);
         }
-        printf("Best result : \n");
+        printf("Best result : %d and selections are\n", bestSolVal);
         for (i=0;i<n;i++)
-            if (bestSol[i]) printf("%d %d\n", inp[i].value, inp[i].weight);
+            if (bestSol[i] == 1) printf("%d %d\n", inp[i].value, inp[i].weight);
+        printf("\n");
+        for (i=0;i<n;i++)
+            if (bestSol[i] == 1) printf("1 ");
+            else printf("0 ");
         MPI_Finalize();
     }
     else {  //slave code
+        //pair_t * inp;
+        //int n, bag_size;
         int pair[2];
-        MPI_Bcast(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
-        n = pair[0]; bag_size = pair[1];
-        inp = (pair_t*)malloc(sizeof(n*sizeof(pair_t)));
-        MPI_Bcast(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
         MPI_Status status;
+        MPI_Recv(pair, 2, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
+        n = pair[0]; bag_size = pair[1];
+        inp = (pair_t*)malloc(n*sizeof(pair_t));
+        MPI_Recv(inp, n, MPI_PAIR, 0, 2, MPI_COMM_WORLD, &status);
+        DBG("Processor %d : Received input from master\n", myrank);
         list_t list;
         list.head = NULL; list.len = 0;
-        int axSol[n+1]; //axSol[n] contains bestSol
-        int bestSol;
+        int bestSolVal;
         //axSp is same as axSol
         while (1){
             MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
             tag_t tag = status.MPI_TAG;
             int src = status.MPI_SOURCE;
             if (tag == END_TAG){
-                DBG("Received END_TAG -- %d", myrank);
+                DBG("Processor %d : Game over!\n", myrank);
                 MPI_Recv(&tag, 1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
                 break;
             }
             if (tag == PBM_TAG) {
+                int *axSol = (int*)malloc(sizeof(int)*(n+1));  //axSol[n] contains bestSol
                 DBG("I am %d, %d asked me to work\n", myrank, src);
                 MPI_Recv(axSol, n+1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
-                bestSol = axSol[n];
+                bestSolVal = axSol[n];
                 insert_into_list(&list, axSol, n+1);
                 while (!empty_list(&list)){
                     int *auxSp = remove_from_list(&list);
                     int high = upper_bound(auxSp, n);
                     DBG("Upper bound calculated by %d = %d\n",myrank, high);
-                    if (high > bestSol){
+                    if (high > bestSolVal){
                         int low = lower_bound(auxSp, n);
                         DBG("Lower bound calculated by %d = %d\n",myrank, low);
-                        if (low > bestSol)  {
+                        if (low > bestSolVal)  {
                             auxSp[n] = low;
-                            bestSol = low;
-                            MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD);
+                            bestSolVal = low;
+                            MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD); //problem
                         }
-                        if (low != high){
+                        if (low != high){ //problem is here
                             int data[2];
                             data[0] = high;
                             data[1] = list.len;
                             MPI_Send(data, 2, MPI_INT, 0, BnB_TAG, MPI_COMM_WORLD);
-                            int assigned[list.len+1];
-                            MPI_Recv(assigned, list.len+1, MPI_INT, 0, BnB_TAG, MPI_COMM_WORLD, &status);
+                            int *assigned = (int*) malloc((list.len+1)*sizeof(int));
+                            MPI_Recv(assigned, list.len+1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
                             if (status.MPI_TAG == BnB_TAG){
                                 int total;
                                 MPI_Get_count(&status, MPI_INT, &total);
-                                bestSol = assigned[total-1]; total--;
-                                auxSp[n] = bestSol;
-                                if (total >= 0){
-                                    branch(auxSp, n, &list);
-                                    for (i=0;i<total;i++){
-                                        int *sp = remove_from_list(&list);
-                                        sp[n] = bestSol;
-                                        MPI_Send(sp, n+1, MPI_INT, assigned[i], PBM_TAG, MPI_COMM_WORLD);
-                                    }
+                                bestSolVal = assigned[total-1]; total--;
+                                branch(auxSp, n, &list);
+                                for (i=0;i<total;i++){
+                                    int *sp = remove_from_list(&list);
+                                    sp[n] = bestSolVal;
+                                    MPI_Send(sp, n+1, MPI_INT, assigned[i], PBM_TAG, MPI_COMM_WORLD);
+                                    DBG("%d request %d to work!\n",myrank, assigned[i]);
                                 }
                             }
                             else{
                                 DBG("Received DONE_TAG by %d\n", myrank);
                             }
+                            free(assigned);
                         }
                     }
                 }
@@ -273,6 +284,5 @@ int main(int argc, char *argv[]){
             }
         }
     }
-
     return 0;
 }

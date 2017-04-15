@@ -4,10 +4,7 @@
 
 void insert_into_list(list_t * list, int *arr, int n){
     node_t * x = (node_t*) malloc(sizeof(node_t));
-    x->arr = (int*)malloc(n*sizeof(int));
-    int i;
-    for (i=0;i<n;i++)
-        (x->arr)[i] = arr[i];
+    x->arr = arr;
     x->next = list->head;
     list->head = x;
     list->len += 1;
@@ -19,7 +16,7 @@ int * remove_from_list(list_t *list){
     list->head = temp->next;
     list->len -= 1;
     int *arr = temp->arr;
-    free(temp);
+;
     return arr;
 }
 
