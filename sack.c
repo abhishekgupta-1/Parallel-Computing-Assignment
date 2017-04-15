@@ -33,6 +33,7 @@ void branch(int *arr, int n, list_t * list){
     int i = 0;
     while (i<n && arr[i]!=-1)
         i++;
+    upto = i;
     if (i != n){
         int *arr1, *arr2;
         arr1 = (int*)malloc(sizeof((n+1)*sizeof(int)));
@@ -85,7 +86,7 @@ int lower_bound(int *arr, int n){
         total_val += inp[i].value;
         weight_used += inp[i].weight;
     }
-    if (i!=n){
+    if (weight_used > bag_size){
         total_val -= inp[i-1].value;
     }
     return total_val;
@@ -100,7 +101,7 @@ int compar(const void *a, const void*b){
     int res;
     if (r1>r2) res = 1;
     else res = -1;
-    return res;
+    return -res;
 }
 
 
@@ -145,9 +146,8 @@ int main(int argc, char *argv[]){
         qsort(inp, n, sizeof(pair_t), compar);
         int pair[2];
         pair[0] = n; pair[1] = bag_size;
-        MPI_Send(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Send(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
-        int n
+        MPI_Bcast(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
         int idle = nProc - 1;
         tag_t tag;
         int busy[nProc];
@@ -156,7 +156,6 @@ int main(int argc, char *argv[]){
         busy[0] = 1;
         int dst = nextIdle(busy, nProc, &idle);
         MPI_Send(bestSol, n+1, MPI_INT, dst, PBM_TAG, MPI_COMM_WORLD);
-        idle--;
         while (idle != nProc-1){
             MPI_Status status;
             MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
@@ -164,9 +163,11 @@ int main(int argc, char *argv[]){
             int src = status.MPI_SOURCE;
             if (tag == SOLVE_TAG) { //receive best solution value and best solution
                 MPI_Recv(bestSol, n+1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
+                DBG("Received best soln from %d, bestSolVal = %d\n", src, bestSol[n]);
             }
             if (tag == IDLE_TAG) { //processor is idle
                 MPI_Recv(&tag, 1, MPI_INT, src, tag, MPI_COMM_WORLD,  &status);
+                DBG("Received idle tag from %d, total number of idle = %d\n", src, idle+1);
                 idle++;
                 busy[status.MPI_SOURCE] = 0;
             }
@@ -176,11 +177,16 @@ int main(int argc, char *argv[]){
                 int high = data[0], nSlaves = data[1];
                 if (high > bestSol[n]) {
                     int total= ((nSlaves <= idle)?nSlaves:idle);
-                    int data[total+1]; //data[0] contains bestSolval, next value contains indicies of available verticies
-                    data[0] = bestSol[n];
-                    for (i=1;i<=total;i++)
+                    int data[total+1]; //data[total] contains bestSolval
+                    data[total] = bestSol[n];
+                    DBG("Assigning %d processors to %d : ", total, src);
+                    for (i=0;i<total;i++){
                         data[i] = nextIdle(busy, nProc, &idle);
+                        DBG("%d ",data[i]);
+                    }
+                    DBG("\n");
                     MPI_Send(data, total+1, MPI_INT, src, BnB_TAG, MPI_COMM_WORLD);
+                    
                 }
                 else{
                     tag = DONE;
@@ -192,71 +198,81 @@ int main(int argc, char *argv[]){
             tag = END_TAG;
             MPI_Send(&tag, 1, MPI_INT, i, END_TAG, MPI_COMM_WORLD);
         }
+        printf("Best result : \n");
+        for (i=0;i<n;i++)
+            if (bestSol[i]) printf("%d %d\n", inp[i].value, inp[i].weight);
+        MPI_Finalize();
     }
     else {  //slave code
         int pair[2];
-        MPI_Send(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
         n = pair[0]; bag_size = pair[1];
-        MPI_Send(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
-        int bestSol[n+1]; //bestSol[n] contains the bestSolVal;
-        bestSol[n] = -1;
-        for (i=0;i<n;i++)
-            bestSol[i] = -1;
+        inp = (pair_t*)malloc(sizeof(n*sizeof(pair_t)));
+        MPI_Bcast(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
         MPI_Status status;
         list_t list;
         list.head = NULL; list.len = 0;
         int axSol[n+1]; //axSol[n] contains bestSol
-        int bestSol = axSol[n];
+        int bestSol;
         //axSp is same as axSol
         while (1){
-        MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-        tag_t tag = status.MPI_TAG;
-        int src = status.MPI_SOURCE;
-        if (tag == END_TAG){
-            MPI_Recv(&tag, 1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
-            break;
-        }
-        if (tag == PBM_TAG) {
-            MPI_Recv(axSol, n+1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
-            insert_into_list(&list, axSol, n+1);
-            while (!empty_list(&list)){
-                int *auxSp = remove_from_list(&list);
-                int high = upper_bound(auxSp, n);
-                if (high > bestSol){
-                    int low = lower_bound(auxSp, n);
-                    if (low > bestSol)  {
-                        auxSp[n] = low;
-                        MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD);
-                    }
-                    if (low != high){
-                        int data[2];
-                        data[0] = high;
-                        data[1] = list.len;
-                        MPI_Send(data, 2, MPI_INT, 0, BnB_TAG, MPI_COMM_WORLD);
-                        int assigned[list.len];
-                        MPI_Recv(assigned, list.len, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-                        int total;
-                        if (status.MPI_TAG == BnB_TAG){
-                        MPI_Get_count(&status, MPI_INT, &total);
-                        bestSol = assigned[total-1]; total--;
-                        if (total >= 0){
-                            branch(auxSp,n, &list);
-                            for (i=0;i<total;i++){
-                                int *sp = remove_from_list(&list);
-                                sp[n] = bestSol;
-                                MPI_Send(sp, n+1, MPI_INT, assigned[i], PBM_TAG, MPI_COMM_WORLD);
-                            }
+            MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+            tag_t tag = status.MPI_TAG;
+            int src = status.MPI_SOURCE;
+            if (tag == END_TAG){
+                DBG("Received END_TAG -- %d", myrank);
+                MPI_Recv(&tag, 1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
+                break;
+            }
+            if (tag == PBM_TAG) {
+                DBG("I am %d, %d asked me to work\n", myrank, src);
+                MPI_Recv(axSol, n+1, MPI_INT, src, tag, MPI_COMM_WORLD, &status);
+                bestSol = axSol[n];
+                insert_into_list(&list, axSol, n+1);
+                while (!empty_list(&list)){
+                    int *auxSp = remove_from_list(&list);
+                    int high = upper_bound(auxSp, n);
+                    DBG("Upper bound calculated by %d = %d\n",myrank, high);
+                    if (high > bestSol){
+                        int low = lower_bound(auxSp, n);
+                        DBG("Lower bound calculated by %d = %d\n",myrank, low);
+                        if (low > bestSol)  {
+                            auxSp[n] = low;
+                            bestSol = low;
+                            MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD);
                         }
+                        if (low != high){
+                            int data[2];
+                            data[0] = high;
+                            data[1] = list.len;
+                            MPI_Send(data, 2, MPI_INT, 0, BnB_TAG, MPI_COMM_WORLD);
+                            int assigned[list.len+1];
+                            MPI_Recv(assigned, list.len+1, MPI_INT, 0, BnB_TAG, MPI_COMM_WORLD, &status);
+                            if (status.MPI_TAG == BnB_TAG){
+                                int total;
+                                MPI_Get_count(&status, MPI_INT, &total);
+                                bestSol = assigned[total-1]; total--;
+                                auxSp[n] = bestSol;
+                                if (total >= 0){
+                                    branch(auxSp, n, &list);
+                                    for (i=0;i<total;i++){
+                                        int *sp = remove_from_list(&list);
+                                        sp[n] = bestSol;
+                                        MPI_Send(sp, n+1, MPI_INT, assigned[i], PBM_TAG, MPI_COMM_WORLD);
+                                    }
+                                }
+                            }
+                            else{
+                                DBG("Received DONE_TAG by %d\n", myrank);
+                            }
                         }
                     }
                 }
+                tag = IDLE_TAG;
+                MPI_Send(&tag, 1, MPI_INT, 0, IDLE_TAG, MPI_COMM_WORLD);
             }
-            tag = IDLE_TAG;
-            MPI_Send(&tag, 1, MPI_INT, 0, IDLE_TAG, MPI_COMM_WORLD);
-        }
         }
     }
 
-    MPI_Finalize();
     return 0;
 }
