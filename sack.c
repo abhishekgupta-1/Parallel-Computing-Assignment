@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <qsort.h>
 #include "list_header.h"
 
 typedef enum { END_TAG, PBM_TAG, SOLVE_TAG, IDLE_TAG, BnB_TAG, DONE} tag_t;
@@ -56,7 +57,6 @@ int upper_bound(int *arr, int n){
     return total_val;
 }
 
-
 int lower_bound(int *arr, int n){
     int total_val=0;
     int weight_used = 0;
@@ -81,6 +81,18 @@ int lower_bound(int *arr, int n){
     return total_val;
 }
 
+int compar(const void *a, const void*b){
+    pair_t * a1 = (pair_t*)a;
+    pair_t * b1 = (pair_t*)b;
+    double r1, r2;
+    r1 = (double)a1->value/a1->weight;
+    r2 = (double)b1->value/b1->weight;
+    int res;
+    if (r1>r2) res = 1;
+    else res = -1;
+    return res;
+}
+
 
 pair_t * inp;
 int n, bag_size;
@@ -96,6 +108,7 @@ int main(int argc, char *argv[]){
     for (i=0;i<n;i++){
         scanf("%d %d", &(inp[i].value), &(inp[i].weight));
     qsort(inp);
+    void qsort(inp, n, sizeof(pair_t), compar);
     
     int myrank, size, len;
     char processor[100];
@@ -212,7 +225,3 @@ int main(int argc, char *argv[]){
     MPI_Finalize();
     return 0;
 }
-
-
-
-
