@@ -1,13 +1,27 @@
-#include <stdlib.h>
+#include <stdlib.h> 
 #include "list_header.h"
 
 
+//void insert_into_list(list_t * list, int *arr, int n){
+    //node_t * x = (node_t*) malloc(sizeof(node_t));
+    //x->arr = arr;
+    //x->next = list->head;
+    //list->head = x;
+    //list->len+=1;
+//}
+
 void insert_into_list(list_t * list, int *arr, int n){
     node_t * x = (node_t*) malloc(sizeof(node_t));
+    x->next = NULL;
     x->arr = arr;
-    x->next = list->head;
-    list->head = x;
-    list->len += 1;
+    list -> len+=1;
+    if (list->len == 1){
+        list->head = x;
+        list->len = 1;
+        list->tail = x;
+    }
+    list->tail->next = x;
+    list->tail = x;
 }
 
 int * remove_from_list(list_t *list){
@@ -16,7 +30,7 @@ int * remove_from_list(list_t *list){
     list->head = temp->next;
     list->len -= 1;
     int *arr = temp->arr;
-;
+
     return arr;
 }
 
