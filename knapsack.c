@@ -28,11 +28,11 @@ int firstIdle(int *busy, int n, int* idle){
 }
 
 int main(int argc, char *argv[]){
-    MPI_Status slaveStatus;
-    int myrank, size, len, source, upper_bound;
+    int myrank, size, len;
     flag_t flag;
     char* buffer;
     char processor[100];
+    {
     //MPI TYPE    
     int count = 2;
     int array_of_blocklengths[] = { 1, 1 };
@@ -47,14 +47,18 @@ int main(int argc, char *argv[]){
     MPI_Type_get_extent( tmp_type, &lb, &extent );
     MPI_Type_create_resized( tmp_type, lb, extent, &MPI_PAIR );
     MPI_Type_commit( &MPI_PAIR );
+    }
 
     int n, bag;
     printf("Enter number of items\n");
     scanf("%d", &n);
     printf("Enter bag size\n");
     scanf("%d",&bag_size);
-    int sol[n], bestSol;
-    memset(sol, '\0', n*sizeof(int));
+
+    int sol[n], bestSol = INT_MIN, curSol = INT_MIN;
+    int i;
+    for (i = 0; i < n; i++) sol[i] = -1;
+
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -64,7 +68,6 @@ int main(int argc, char *argv[]){
     
     if (myrank == 0) // master code
     {
-       
         int i;
         printf("Enter %d value-weight pairs\n", n);
         pair_t * arr = (pair_t*)calloc(n, sizeof(pair-t));
@@ -81,7 +84,8 @@ int main(int argc, char *argv[]){
         fIdle = firstIdle(busy, nProc, &idle);
         flag = PBM_TAG;
         MPI_Send(&flag, 1, MPI_INT, fIdle, MPI_ANY_TAG, MPI_COMM_WORLD);   
-        MPI_Send(arr, n, MPI_PAIR, fIdle, MPI_ANY_TAG, MPI_COMM_WORLD); //Send array 
+        MPI_Send(sol, n, MPI_PAIR, fIdle, MPI_ANY_TAG, MPI_COMM_WORLD); //Send initial sp 
+        MPI_Send(bestSol, 1, MPI_INT, fIdle, MPI_ANY_TAG, MPI_COMM_WORLD);
         MPI_Status status;
         while (idle < nProc-1){
             MPI_Recv(&flag, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
@@ -92,47 +96,71 @@ int main(int argc, char *argv[]){
                 MPI_Recv(sol, n, MPI_INT, src, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
             }
             if (flag == BnB_TAG) {
-                int high, nSlaves;
+                int high; 
                 MPI_Recv(&high, 1, MPI_INT, src, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-                MPI_Recv(&nSlaves, 1, MPI_INT, src, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+                int assigned[2] = {};
+                assigned[0] = assigned[1] = -1;
                 if (high>bestSol){ //problem must be branched
-                    int total = ((nSlaves <= idle)?nSlaves:idle);
-                    int assigned[2] = {};
-                    assigned[0] = assigned[1] = -1;
                     assigned[0] = firstIdle(busy, n, &idle);
                     assigned[1] = firstIdle(busy, n, &idle);
-                    MPI_Send(assigned, 2, MPI_INT, src, MPI_ANY_TAG, MPI_COMM_WORLD);
                 }
-                else {
-                    int val = END_TAG;
-                    MPI_Send(&val, 1, MPI_INT, src, MPI_ANY_TAG, MPI_COMM_WORLD);
-                }
+                MPI_Send(assigned, 2, MPI_INT, src, MPI_ANY_TAG, MPI_COMM_WORLD);
             }
-            if (IDLE_TAG){
-                idle++;
-                busy[src] = 1;
-            }
-        }    
+            if (IDLE_TAG){ idle++; busy[src] = 1; }
+        }
     }
-    
-     if (myrank != 0) // slave code
+    else if (myrank != 0) // slave code
     {
-        pair_t * recvArr = (pair_t*)calloc(n, sizeof(pair_t));
+        int source, upper_bound;
+        MPI_Status slaveStatus;
         int *currSol;
-        currSol = (int)calloc(n, sizeof(int));
+        pair_t * recvArr = (pair_t*)calloc(n, sizeof(pair_t));
         MPI_Bcast(recvArr,n,MPI_PAIR,0,MPI_COMM_WORLD);
+        MPI_Recv(&flag,1,MPI_INT,0,MPI_ANY_TAG,MPI_COMM_WORLD, MPI_ANY_TAG, MPI_COMM_WORLD, &slaveStatus);
+        source=status.MPI_SOURCE;
+        if (flag==END_TAG){ // receive the finishing message
+            return;
+        }
+        if (PBM_TAG){ // receive the problem to be branched
+            MPI_Recv(sol,n,MPI_INT,source,MPI_ANY_TAG,MPI_COMM_WORLD,&slaveStatus);
+            MPI_Recv(&bestSol, 1, MPI_INT, source, MPI_ANY_TAG, MPI_COMM_WORLD, &slaveStatus);
+            list_t list;
+            list.head = NULL;
+            list.len = 0;
+            insert_into_list(&list, sol, n);
+            while (!empty_list(&list)){
+                int * arr = remove_from_list(&list);
+                int high = upper_bound(arr);
+                if (high > highSol){
+                    int low = lower_bound(arr);
+                    if (low > bestSol) {
+                        bestSol = low;
+                        currSol = arr;
+                        int flag = SOLVE_TAG;
+                        MPI_Send(&flag, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD);
+                        MPI_Send(&bestSol, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD);
+                        MPI_Send(currSol , n, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD);
+                    }
+                    if (high != low) {
+                        int flag = BnB_TAG, num;
+                        MPI_Send(&flag , 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD);
+                        MPI_Send(&(list->len) , 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD);
+                        MPI_Recv(&num, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COM_WORLD, &slaveStatus);
+                        int arr[num];
+                        MPI_Recv(arr, num, MPI_INT, 0, MPI_ANY_TAG, MPI_COM_WORLD, &slaveStatus);
+                        branch(sol,n,  &list);
+                        if (arr[i]
 
-    MPI_Recv(&flag,1,MPI_INT,0,MPI_ANY_TAG,MPI_COMM_WORLD, MPI_ANY_TAG, MPI_COMM_WORLD, &slaveStatus);
-    source=status.MPI_SOURCE;
+                    }
 
-    if (flag==END_TAG){ // receive the finishing message
-        return;
-    }
+                }
+            }
 
-    if (PBM_TAG){ // receive the problem to be branched
- //       MPI_Recv(&upperBound,1,MPI_INT,source,MPI_ANY_TAG,MPI_COMM_WORLD,&slaveStatus);  
-        MPI_Recv(currSol,n,MPI_INT,source,MPI_ANY_TAG,MPI_COMM_WORLD,&slaveStatus);
-        //insert in queue
+
+
+            
+
+            //insert in queue
         
         
         
@@ -150,12 +178,41 @@ int main(int argc, char *argv[]){
 24 bestSol, // the best solution value
 25 sol); // the solution vector
 26 }        
-
-    
-
-
     }
+}
 
+typedef node_t{
+    int *arr; //length n always
+    node_t * next;
+} node_t;
 
+typedef list_t {
+    node_t * head;
+    int len;
+};
 
+void insert_into_list(list_t * list, int *arr, int n){
+    node_t * x = (node_t*) malloc(sizeof(node_t));
+    x->arr = (int*)malloc(n*sizeof(int));
+    int i;
+    for (i=0;i<n;i++)
+        (x->arr)[i] = arr[i];
+    x->next = list->head;
+    list->head = x;
+    list->len += 1;
+}
+
+int * remove_from_list(list_t *list){
+    if (list->len == 0) return NULL;
+    node_t * temp = list->head;
+    list->head = temp->next;
+    list->len -= 1;
+    int *arr = temp->arr;
+    free(temp);
+    return arr;
+}
+
+int empty_list(list_t * list){
+    if (list->len == 0) return 1;
+    return 0;
 }
