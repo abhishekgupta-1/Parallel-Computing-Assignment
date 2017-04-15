@@ -36,7 +36,7 @@ void branch(int *arr, int n, list_t * list){
     upto = i;
     if (i != n){
         int *arr1, *arr2;
-        arr1 = (int*)malloc(sizeof((n+1)*sizeof(int)));
+        arr1 = (int*)malloc(((n+1)*sizeof(int)));
         for (i=0;i<n+1;i++)
             arr1[i] = arr[i];
         arr2 = arr;
@@ -245,10 +245,10 @@ int main(int argc, char *argv[]){
                     int *auxSp = remove_from_list(&list);
                     int high = upper_bound(auxSp, n);
                     DBG("Upper bound calculated by %d = %d\n",myrank, high);
-                    if (high > bestSolVal){
+                    if (high >= bestSolVal){
                         int low = lower_bound(auxSp, n);
                         DBG("Lower bound calculated by %d = %d\n",myrank, low);
-                        if (low > bestSolVal)  {
+                        if (low >= bestSolVal)  {
                             auxSp[n] = low;
                             bestSolVal = low;
                             MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD); //problem
