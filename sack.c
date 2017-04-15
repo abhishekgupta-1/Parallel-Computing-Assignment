@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "list_header.h"
 
 typedef enum { END_TAG, PBM_TAG, SOLVE_TAG, IDLE_TAG, BnB_TAG, DONE} tag_t;
 typedef struct pair_t{
@@ -16,6 +17,71 @@ int nextIdle(int *busy, int n, int* idle){
     return -1;
 }
 
+void branch(int *arr, int n, list_t * list){
+    int upto;
+    int i = 0;
+    while (i<n && arr[i]!=-1)
+        i++;
+    if (i != n){
+        int *arr1, *arr2;
+        arr1 = (int*)malloc(sizeof((n+1)*sizeof(int)));
+        for (i=0;i<n+1;i++)
+            arr1[i] = arr[i];
+        arr2 = arr;
+        arr1[upto] = 0;
+        arr2[upto] = 1;
+        insert_into_list(list, arr1, n+1);
+        insert_into_list(list, arr2, n+1);
+    }
+}
+
+int upper_bound(int *arr, int n){
+    int total_val=0;
+    int weight_used = 0;
+    int i;
+    int upto = 0;
+    for (i=0; i<n && arr[i]!=-1; i++){
+        if (arr[i] == 1){
+            total_val += inp[i].value;
+            weight_used += inp[i].weight;
+        }
+    }
+    upto = i;
+    if (weight_used>bag_size) return -1;
+    int left = bag_size - weight_used;
+    for (i=upto; i<n && weight_used<=bag_size; i++){
+        total_val += inp[i].value;
+        weight_used += inp[i].weight;
+    }
+    return total_val;
+}
+
+
+int lower_bound(int *arr, int n){
+    int total_val=0;
+    int weight_used = 0;
+    int i;
+    int upto = 0;
+    for (i=0; i<n && arr[i]!=-1; i++){
+        if (arr[i] == 1){
+            total_val += inp[i].value;
+            weight_used += inp[i].weight;
+        }
+    }
+    upto = i;
+    if (weight_used>bag_size) return -1;
+    int left = bag_size - weight_used;
+    for (i=upto; i<n && weight_used<=bag_size; i++){
+        total_val += inp[i].value;
+        weight_used += inp[i].weight;
+    }
+    if (i!=n){
+        total_val -= inp[i-1].value;
+    }
+    return total_val;
+}
+
+
 pair_t * inp;
 int n, bag_size;
 
@@ -28,8 +94,9 @@ int main(int argc, char *argv[]){
     scanf("%d %d", &n, &bag_size);
     inp = (pair_t*)malloc(sizeof(n*sizeof(pair_t)));
     for (i=0;i<n;i++){
-        scanf("%d %d", &(arr[i].val), &(arr[i].size));
-
+        scanf("%d %d", &(inp[i].value), &(inp[i].weight));
+    qsort(inp);
+    
     int myrank, size, len;
     char processor[100];
     MPI_Init(&argc, &argv);
@@ -80,13 +147,16 @@ int main(int argc, char *argv[]){
                 }
             }
         }
-        //Broadcast END_TAG
+        for (i=1;i<nProc;i++){
+            tag = END_TAG;
+            MPI_SEND(&tag, 1, MPI_INT, i, END_TAG, MPI_COMM_WORLD);
+        }
     }
     else {  //slave code
         MPI_Status status;
         list_t list;
         list.head = NULL; list->len = 0;
-        int axSol[n+1]; //axSol[n] contains bestSol, axSol[n+1] contains curBest val
+        int axSol[n+1]; //axSol[n] contains bestSol
         int bestSol = axSol[n];
         //axSp is same as axSol
         while (1){
@@ -145,38 +215,4 @@ int main(int argc, char *argv[]){
 
 
 
-typedef node_t{
-    int *arr; //length n always
-    node_t * next;
-} node_t;
 
-typedef list_t {
-    node_t * head;
-    int len;
-};
-
-void insert_into_list(list_t * list, int *arr, int n){
-    node_t * x = (node_t*) malloc(sizeof(node_t));
-    x->arr = (int*)malloc(n*sizeof(int));
-    int i;
-    for (i=0;i<n;i++)
-        (x->arr)[i] = arr[i];
-    x->next = list->head;
-    list->head = x;
-    list->len += 1;
-}
-
-int * remove_from_list(list_t *list){
-    if (list->len == 0) return NULL;
-    node_t * temp = list->head;
-    list->head = temp->next;
-    list->len -= 1;
-    int *arr = temp->arr;
-    free(temp);
-    return arr;
-}
-
-int empty_list(list_t * list){
-    if (list->len == 0) return 1;
-    return 0;
-}
