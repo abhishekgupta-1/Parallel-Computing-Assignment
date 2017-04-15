@@ -36,7 +36,7 @@ void branch(int *arr, int n, list_t * list){
     upto = i;
     if (i != n){
         int *arr1, *arr2;
-        arr1 = (int*)malloc(sizeof((n+1)*sizeof(int)));
+        arr1 = (int*)malloc(((n+1)*sizeof(int)));
         for (i=0;i<n+1;i++)
             arr1[i] = arr[i];
         arr2 = arr;
@@ -136,7 +136,7 @@ int main(int argc, char *argv[]){
     
     if (myrank == 0){ //master code
         scanf("%d %d", &n, &bag_size);
-        inp = (pair_t*)malloc(sizeof(n*sizeof(pair_t)));
+        inp = (pair_t*)malloc((n*sizeof(pair_t)));
         for (i=0;i<n;i++)
             scanf("%d %d", &(inp[i].value), &(inp[i].weight));
         int bestSol[n+1]; //bestSol[n] contains the bestSolVal;
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]){
             tag = END_TAG;
             MPI_Send(&tag, 1, MPI_INT, i, END_TAG, MPI_COMM_WORLD);
         }
-        printf("Best result : \n");
+        printf("Best result : %d\n",bestSol[n]);
         for (i=0;i<n;i++)
             if (bestSol[i]) printf("%d %d\n", inp[i].value, inp[i].weight);
         MPI_Finalize();
@@ -207,7 +207,7 @@ int main(int argc, char *argv[]){
         int pair[2];
         MPI_Bcast(pair, 2, MPI_INT, 0, MPI_COMM_WORLD);
         n = pair[0]; bag_size = pair[1];
-        inp = (pair_t*)malloc(sizeof(n*sizeof(pair_t)));
+        inp = (pair_t*)malloc((n*sizeof(pair_t)));
         MPI_Bcast(inp, n, MPI_PAIR, 0, MPI_COMM_WORLD);
         MPI_Status status;
         list_t list;

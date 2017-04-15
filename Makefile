@@ -1,12 +1,12 @@
 all:
 	make debug
-	make run < input.txt
+	make run 
 nodebug:
 	gcc -g -c list.c
 	mpicc -g sack.c list.o -o sack
-	make run < input.txt
+	make run 
 debug:
 	gcc -g -c list.c
 	mpicc -g -DDEBUG sack.c list.o -o sack
 run:
-	mpirun -n 4 ./sack
+	mpirun -n 4 ./sack < t3.in
