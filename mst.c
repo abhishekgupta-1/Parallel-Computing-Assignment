@@ -74,14 +74,22 @@ int upper_bound(int *auxSp) {
     for (i = 0; i < n; i++)
         key[i] = INT_MAX, mst[i] = 0;
     int count = 0;
+    int inside = 0;
     for (i=0;i<n;i++)
         if (auxSp[i]!=-1) {
+            inside = 1;
             mst[i] = 1;count++;
             int t = i;
             for (j=0;j<n;j++)
                 if (t!=j && key[j] > graph[t][j])
                     key[j] = graph[t][j];
         }
+    if (inside == 0) {
+        key[0] = 0;
+        for (j=0;j<n;j++)
+            if (0!=j && key[j] > graph[0][j])
+                key[j] = graph[0][j];
+    }
     int total = 0;
     for (i = 0; i < n-count; i++) {
         int u = minKey(key, mst);
@@ -109,21 +117,23 @@ int lower_bound(int *auxSp){
 
 void branch(list_t *list, int *sol){
 	int i=0,j=0;
+        int found = 0;
 	for(i=0;i<n;i++){
-		if(sol[i]==0){
-			printf("Problem solved");
-			return;
-		}
-		else if((sol[i]==-1)&&(i!=sol[n+2])){
-		    int *newSubP = (int*)malloc((n+4)*sizeof(int));
-    	    for (j=0;j<n+4;j++)
-        	    newSubP[j] = sol[j];
+            if((sol[i]==-1)&&(i!=sol[n+2])){
+                found = 1;
+                int *newSubP = (int*)malloc((n+4)*sizeof(int));
+                for (j=0;j<n+4;j++)
+                        newSubP[j] = sol[j];
         	newSubP[sol[n+2]]=i;
        		newSubP[n] += graph[sol[n+2]][i]; //curCost
-    		newSubP[n+2] = i; //elem which has to take decision
-			insert_into_list(list,newSubP,n);
-		}
+                //DBG("%d %d %d\n", i, newSubP[n], sol[n+2]);
+                insert_into_list(list,newSubP,n);
+            }
 	}
+        if (found == 0){
+            sol[n] += graph[sol[n+2]][0]; //curCost
+            insert_into_list(list,sol,n);
+        }
 }
 	
 	
@@ -145,8 +155,6 @@ int main(int argc, char *argv[]){
         printf("Enter number of nodes\n");
         scanf("%d",&n);
         graph = alloc_2d_int(n,n);
-        for (i=0;i<n;i++)
-            graph[i] = (int*)malloc(n*sizeof(int));
         printf("Enter adjacency matrix\n");
         for (i=0;i<n;i++)
             for (j=0;j<n;j++)
@@ -203,6 +211,7 @@ int main(int argc, char *argv[]){
                 int low = data[0];
                 int nSlaves = data[1];
                 if (low < bestCost) {
+                    bestCost = low;
                     int total= ((nSlaves <= idle)?nSlaves:idle);
                     int *data = (int*)malloc((total+1)*sizeof(int)); //data[total] contains bestSolval
                     data[total] = bestCost; 
@@ -213,7 +222,6 @@ int main(int argc, char *argv[]){
                     }
                     DBG("\n");
                     MPI_Send(data, total+1, MPI_INT, src, BnB_TAG, MPI_COMM_WORLD);
-                    
                 }
                 else{
                     tag = DONE;
@@ -225,6 +233,7 @@ int main(int argc, char *argv[]){
             tag = END_TAG;
             MPI_Send(&tag, 1, MPI_INT, i, END_TAG, MPI_COMM_WORLD);
         }
+        printf("Min Cost tour is : %d\n",bestCost);
         MPI_Finalize();
     }
     else {  //slave code
@@ -258,6 +267,8 @@ int main(int argc, char *argv[]){
                 insert_into_list(&list, auxSp, n+4);
                 while (!empty_list(&list)){
                     int *auxSp = remove_from_list(&list);
+                    //DBG("New problem : \n");
+                    //DBG("current cost : %d\n", auxSp[n]);
                     int low = lower_bound(auxSp);
                     DBG("Lower bound calculated by %d = %d\n",myrank, low);
                     if (low < bestCost){

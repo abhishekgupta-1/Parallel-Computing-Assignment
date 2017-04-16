@@ -15,3 +15,5 @@ debug:
 	mpicc -g -DDEBUG sack.c list.o -o sack
 run:
 	mpirun -n 4 ./mst < input.txt
+clean:
+	rm mst
