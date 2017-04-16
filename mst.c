@@ -20,13 +20,12 @@ int nextIdle(int *busy, int n, int* idle){
     }
     return -1;
 }
-//Following function is taken from stackoverflow -- http://stackoverflow.com/questions/5901476/sending-and-receiving-2d-array-over-mpi
+
 int **alloc_2d_int(int rows, int cols) {
     int *data = (int *)malloc(rows*cols*sizeof(int));
     int **array= (int **)malloc(rows*sizeof(int*));
     for (int i=0; i<rows; i++)
         array[i] = &(data[cols*i]);
-
     return array;
 }
 
@@ -41,6 +40,27 @@ int **alloc_2d_int(int rows, int cols) {
 //two new tags - 
 //UPDATE BESTCOST_TAG, to inform master of the best cost
 //BEST SOL - to inform of the best solution
+
+// TODO
+// upper_bound
+// lower_bound
+// branch  -- update curCost also
+
+int n;
+int **graph;
+
+
+int upper_bound(int *auxSp){
+    int last = auxSp[n+2];
+
+    
+}
+
+int lower_bound(int *auxSp){
+
+}
+
+
 
 int main(int argc, char *argv[]){
     int i;
@@ -70,10 +90,10 @@ int main(int argc, char *argv[]){
     
     if (myrank == 0){ //master code
         //Receive Input
-        int n,i,j;
+        int i,j;
         printf("Enter number of nodes\n");
         scanf("%d",&n);
-        int **graph = alloc_2d_int(n,n);
+        graph = alloc_2d_int(n,n);
         for (i=0;<n;i++)
             graph[i] = (int*)malloc(n*sizeof(int));
         printf("Enter adjacency matrix\n");
@@ -153,9 +173,8 @@ int main(int argc, char *argv[]){
         MPI_Finalize();
     }
     else {  //slave code
-        int n;
         MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        int ** graph = alloc_2d_int(n,n);
+        graph = alloc_2d_int(n,n);
         MPI_Bcast(&graph[0][0], n*n, MPI_INT, 0, MPI_COM_WORLD);
         list_t list; //stack for storing problems
         list.head = NULL; list.len = 0;
@@ -184,10 +203,10 @@ int main(int argc, char *argv[]){
                 insert_into_list(&list, auxSp, n+4);
                 while (!empty_list(&list)){
                     int *auxSp = remove_from_list(&list);
-                    int low = lower_bound(auxSp,n);
+                    int low = lower_bound(auxSp);
                     DBG("Lower bound calculated by %d = %d\n",myrank, high);
                     if (low < bestCost){
-                        int high = upper_bound(auxSp, n);
+                        int high = upper_bound(auxSp);
                         DBG("Upper bound calculated by %d = %d\n",myrank, high);
                         if (high < bestCost)  {
                             //Update bestCost here
