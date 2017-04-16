@@ -1,3 +1,8 @@
+mst:
+	gcc -g -c list.c
+	mpicc -g -DDEBUG mst.c list.o -o mst
+	make run
+
 all:
 	make debug
 	make run 
@@ -9,4 +14,4 @@ debug:
 	gcc -g -c list.c
 	mpicc -g -DDEBUG sack.c list.o -o sack
 run:
-	mpirun -n 4 ./sack < t3.in
+	mpirun -n 4 ./mst < input.txt

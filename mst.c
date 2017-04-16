@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <limits.h>
+#include "list_header.h"
 
 
 #ifdef DEBUG
@@ -11,6 +12,9 @@
 #define DBG(fmt, args...)
 #endif
 
+int n;
+int **graph;
+ 
 typedef enum { END_TAG, PBM_TAG, SOLVE_TAG, IDLE_TAG, BnB_TAG, DONE} tag_t;
 
 int nextIdle(int *busy, int n, int* idle){
@@ -29,6 +33,23 @@ int **alloc_2d_int(int rows, int cols) {
     return array;
 }
 
+int min( int *a, int ind){
+    int temp=INT_MAX,i=0;
+    for(i=0;i<n;i++){
+        if(i!=ind && temp>a[i])
+            temp=a[i];
+    }
+    return temp;
+}
+
+int minKey(int key[], int mstSet[]) {
+   int min = INT_MAX, min_index;
+   for (int v = 0; v < n; v++)
+     if (mstSet[v] == 0 && key[v] < min)
+         min = key[v], min_index = v;
+   return min_index;
+}
+
 //partial solution
 //n elem array - contains points to the next element in the cycle
 //currCost occured
@@ -42,26 +63,70 @@ int **alloc_2d_int(int rows, int cols) {
 //BEST SOL - to inform of the best solution
 
 // TODO
-// upper_bound
-// lower_bound
 // branch  -- update curCost also
 
-int n;
-int **graph;
 
-
-int upper_bound(int *auxSp){
-    int last = auxSp[n+2];
-
-    
+int upper_bound(int *auxSp) {
+    int *key = (int*)malloc(n*sizeof(int));   // Key values used to pick minimum weight edge in cut
+    int *mst = (int*)malloc(n*sizeof(int));  // To represent set of vertices not yet included in MST
+    int i, j;
+    // Initialize all keys as INFINITE
+    for (i = 0; i < n; i++)
+        key[i] = INT_MAX, mst[i] = 0;
+    int count = 0;
+    for (i=0;i<n;i++)
+        if (auxSp[i]!=-1) {
+            mst[i] = 1;count++;
+            int t = i;
+            for (j=0;j<n;j++)
+                if (t!=j && key[j] > graph[t][j])
+                    key[j] = graph[t][j];
+        }
+    int total = 0;
+    for (i = 0; i < n-count; i++) {
+        int u = minKey(key, mst);
+        mst[u] = 1;
+        total += key[u];
+        for (int v = 0; v < n; v++)
+            if (mst[v] == 0 && graph[u][v] <  key[v])
+                key[v] = graph[u][v];
+        
+    }
+    free(key);
+    free(mst);
+    return 2*(total+auxSp[n]);
 }
 
 int lower_bound(int *auxSp){
-
+    int sum=auxSp[n],i=0;
+    for(i=0;i<n;i++){
+        if(auxSp[i]==-1){
+            sum = sum + min(graph[i],i);
+        }
+    }
+    return sum;
 }
 
-
-
+void branch(list_t *list, int *sol){
+	int i=0,j=0;
+	for(i=0;i<n;i++){
+		if(sol[i]==0){
+			printf("Problem solved");
+			return;
+		}
+		else if((sol[i]==-1)&&(i!=sol[n+2])){
+		    int *newSubP = (int*)malloc((n+4)*sizeof(int));
+    	    for (j=0;j<n+4;j++)
+        	    newSubP[j] = sol[j];
+        	newSubP[sol[n+2]]=i;
+       		newSubP[n] += graph[sol[n+2]][i]; //curCost
+    		newSubP[n+2] = i; //elem which has to take decision
+			insert_into_list(list,newSubP,n);
+		}
+	}
+}
+	
+	
 int main(int argc, char *argv[]){
     int i;
     int myrank, size, len;
@@ -71,20 +136,6 @@ int main(int argc, char *argv[]){
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Get_processor_name(processor, &len);
     int nProc = size;
-    DBG("Hello I am processor no. %d out of %d processors\n", myrank, size);
-    //MPI TYPE    
-    int count = 2;
-    int array_of_blocklengths[] = { 1, 1 };
-    MPI_Aint array_of_displacements[] = { offsetof( pair_t, value), 
-        offsetof(pair_t, weight)};
-    MPI_Datatype array_of_types[] = { MPI_INT, MPI_INT };
-    MPI_Datatype tmp_type, MPI_PAIR;
-    MPI_Aint lb, extent;
-    MPI_Type_create_struct( count, array_of_blocklengths, array_of_displacements,
-                            array_of_types, &tmp_type );
-    MPI_Type_get_extent( tmp_type, &lb, &extent );
-    MPI_Type_create_resized( tmp_type, lb, extent, &MPI_PAIR );
-    MPI_Type_commit( &MPI_PAIR );
     
     //Enter you code here
     
@@ -94,7 +145,7 @@ int main(int argc, char *argv[]){
         printf("Enter number of nodes\n");
         scanf("%d",&n);
         graph = alloc_2d_int(n,n);
-        for (i=0;<n;i++)
+        for (i=0;i<n;i++)
             graph[i] = (int*)malloc(n*sizeof(int));
         printf("Enter adjacency matrix\n");
         for (i=0;i<n;i++)
@@ -103,7 +154,7 @@ int main(int argc, char *argv[]){
         DBG("MASTER : Input Received\n");
         //Send data to all other processors
         MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&graph[0][0], n*n, MPI_INT, 0, MPI_COM_WORLD);
+        MPI_Bcast(&graph[0][0], n*n, MPI_INT, 0, MPI_COMM_WORLD);
         DBG("MASTER : Data Broadcast successfull!\n");
         int idle = nProc - 1;
         tag_t tag;
@@ -111,11 +162,11 @@ int main(int argc, char *argv[]){
         for (i=0;i<nProc;i++) busy[i] = 0;
         busy[0] = 1;
         int dst = nextIdle(busy, nProc, &idle);
-        int bestCost = MAX_INT;
+        int bestCost = INT_MAX;
         //find Initial Solution ----------------------- TODO
         int *initial_sP = (int*)malloc((n+4)*sizeof(int));
         for (i=0;i<n;i++)
-            initial_sP[i] = 0;
+            initial_sP[i] = -1;
         initial_sP[n] = 0; //curCost
         initial_sP[n+1] = bestCost; //bestCost
         initial_sP[n+2] = 0; //elem which has to take decision
@@ -147,10 +198,14 @@ int main(int argc, char *argv[]){
                 busy[status.MPI_SOURCE] = 0;
             }
             if (tag == BnB_TAG) {
-                if (high > bestSolVal) {
+                int data[2];
+                MPI_Recv(data,2,MPI_INT, src, tag, MPI_COMM_WORLD, &status);
+                int low = data[0];
+                int nSlaves = data[1];
+                if (low < bestCost) {
                     int total= ((nSlaves <= idle)?nSlaves:idle);
                     int *data = (int*)malloc((total+1)*sizeof(int)); //data[total] contains bestSolval
-                    data[total] = bestSolVal; 
+                    data[total] = bestCost; 
                     DBG("Assigning %d processors to %d : ", total, src);
                     for (i=0;i<total;i++){
                         data[i] = nextIdle(busy, nProc, &idle);
@@ -175,7 +230,7 @@ int main(int argc, char *argv[]){
     else {  //slave code
         MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
         graph = alloc_2d_int(n,n);
-        MPI_Bcast(&graph[0][0], n*n, MPI_INT, 0, MPI_COM_WORLD);
+        MPI_Bcast(&graph[0][0], n*n, MPI_INT, 0, MPI_COMM_WORLD);
         list_t list; //stack for storing problems
         list.head = NULL; list.len = 0;
         int bestCost, currCost, flag;
@@ -192,7 +247,7 @@ int main(int argc, char *argv[]){
             }
             if (tag == PBM_TAG) {
                 DBG("Processor %d: %d asked me to work\n", myrank, src);
-                int *auxSp = (int*)malloc((n+4)*sizeof(int)):
+                int *auxSp = (int*)malloc((n+4)*sizeof(int));
                 //Receive subproblem
                 MPI_Recv(auxSp, n+4, MPI_INT, src, tag, MPI_COMM_WORLD,&status);
                 //Update flag, bestCost and currCost
@@ -204,7 +259,7 @@ int main(int argc, char *argv[]){
                 while (!empty_list(&list)){
                     int *auxSp = remove_from_list(&list);
                     int low = lower_bound(auxSp);
-                    DBG("Lower bound calculated by %d = %d\n",myrank, high);
+                    DBG("Lower bound calculated by %d = %d\n",myrank, low);
                     if (low < bestCost){
                         int high = upper_bound(auxSp);
                         DBG("Upper bound calculated by %d = %d\n",myrank, high);
@@ -235,7 +290,7 @@ int main(int argc, char *argv[]){
                                 int *sp;
                                 for (i=0;i<total;i++){
                                     //remove from list
-                                    sp = remove_from_list(&list):
+                                    sp = remove_from_list(&list);
                                     //send bestSolVal and removed subproblem to the assigned node
                                     MPI_Send(sp, n+4, MPI_INT, assigned[i], PBM_TAG, MPI_COMM_WORLD);
                                 }
