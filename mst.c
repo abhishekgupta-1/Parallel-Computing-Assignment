@@ -84,12 +84,8 @@ int upper_bound(int *auxSp) {
                 if (t!=j && key[j] > graph[t][j])
                     key[j] = graph[t][j];
         }
-    if (inside == 0) {
+    if (inside == 0) 
         key[0] = 0;
-        for (j=0;j<n;j++)
-            if (0!=j && key[j] > graph[0][j])
-                key[j] = graph[0][j];
-    }
     int total = 0;
     for (i = 0; i < n-count; i++) {
         int u = minKey(key, mst);
@@ -132,6 +128,7 @@ void branch(list_t *list, int *sol){
 	}
         if (found == 0){
             sol[n] += graph[sol[n+2]][0]; //curCost
+            printf("---------@@@@@@@@@@@@-----------------\n");
             insert_into_list(list,sol,n);
         }
 }
@@ -211,7 +208,6 @@ int main(int argc, char *argv[]){
                 int low = data[0];
                 int nSlaves = data[1];
                 if (low < bestCost) {
-                    bestCost = low;
                     int total= ((nSlaves <= idle)?nSlaves:idle);
                     int *data = (int*)malloc((total+1)*sizeof(int)); //data[total] contains bestSolval
                     data[total] = bestCost; 
@@ -271,10 +267,10 @@ int main(int argc, char *argv[]){
                     //DBG("current cost : %d\n", auxSp[n]);
                     int low = lower_bound(auxSp);
                     DBG("Lower bound calculated by %d = %d\n",myrank, low);
-                    if (low < bestCost){
+                    if (low <= bestCost){
                         int high = upper_bound(auxSp);
                         DBG("Upper bound calculated by %d = %d\n",myrank, high);
-                        if (high < bestCost)  {
+                        if (high <= bestCost)  {
                             //Update bestCost here
                             bestCost = high;
                             auxSp[n+1] = high;
@@ -294,7 +290,8 @@ int main(int argc, char *argv[]){
                                 MPI_Get_count(&status, MPI_INT, &total);
                                 total--;
                                 //assign received bestSolVal
-                                bestCost = assigned[total];
+                                if (bestCost > assigned[total])
+                                    bestCost = assigned[total];
                                 auxSp[n+1] = bestCost;
                                 //branch the problem
                                 branch(&list, auxSp);
