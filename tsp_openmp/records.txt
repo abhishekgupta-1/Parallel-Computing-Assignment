@@ -1,0 +1,24 @@
+16-threads
+real    0m0.021s
+user    0m0.064s
+sys    0m0.012s
+
+8-threads
+real    0m0.018s
+user    0m0.056s
+sys    0m0.008s
+
+4 - threads
+real    0m0.021s
+user    0m0.056s
+sys    0m0.008s
+
+1 - threads
+real    0m0.047s
+user    0m0.040s
+sys    0m0.004s
+
+2 - threads
+real    0m0.027s
+user    0m0.044s
+sys    0m0.004s

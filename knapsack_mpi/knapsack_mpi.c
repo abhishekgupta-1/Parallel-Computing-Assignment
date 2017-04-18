@@ -215,9 +215,7 @@ int main(int argc, char *argv[]){
         for (i=0;i<n;i++)
             if (bestSol[i] == 1) printf("%d %d\n", inp[i].value, inp[i].weight);
         printf("\n");
-        for (i=0;i<n;i++)
-            if (bestSol[i] == 1) printf("1 ");
-            else printf("0 ");
+
         MPI_Finalize();
     }
     else {  //slave code
@@ -253,10 +251,10 @@ int main(int argc, char *argv[]){
                     int *auxSp = remove_from_list(&list);
                     int high = upper_bound(auxSp, n);
                     DBG("Upper bound calculated by %d = %d\n",myrank, high);
-                    if (high > bestSolVal){
+                    if (high >= bestSolVal){
                         int low = lower_bound(auxSp, n);
                         DBG("Lower bound calculated by %d = %d\n",myrank, low);
-                        if (low > bestSolVal)  {
+                        if (low >= bestSolVal)  {
                             auxSp[n] = low;
                             bestSolVal = low;
                             MPI_Send(auxSp, n+1, MPI_INT, 0, SOLVE_TAG, MPI_COMM_WORLD); //problem
