@@ -1,0 +1,5 @@
+For 4 threads
+2.20user 1.47system 0:02.05elapsed 
+
+For 2 threads
+2.29user 1.50system 0:02.08elapsed

@@ -1,0 +1,24 @@
+Non-blocking send and blocking receive
+4 node
+real    0m9.227s
+user    0m4.876s
+sys    0m3.812s
+
+2 node
+real    0m10.189s
+user    0m4.372s
+sys    0m5.300s
+
+-------------------------------------------
+
+Blocking Send and Blocking Receive
+4 node
+real    0m10.739s
+user    0m4.776s
+sys    0m5.512s
+
+2 node
+real    0m9.109s
+user    0m4.764s
+sys    0m3.848s
+

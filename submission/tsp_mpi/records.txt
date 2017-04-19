@@ -1,0 +1,30 @@
+On t1.in
+-----------------------------------------------
+
+4 node nonblocking send
+real    0m21.034s
+user    0m9.480s
+sys    0m11.032s
+
+
+2 node nonblocking send
+
+real    0m8.817s
+user    0m4.376s
+sys    0m3.936s
+
+-------------------------------------------------------
+
+4 node blocking send
+Minimum cost is 291
+Path is : 0 12 1 14 8 4 6 2 11 13 9 7 5 3 10 0
+
+real    0m40.354s
+user    0m18.512s
+sys    0m21.320s
+
+2node blocking send
+
+real    0m8.751s
+user    0m4.644s
+sys    0m3.836s
